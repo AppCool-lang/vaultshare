@@ -34,6 +34,9 @@ const APPLE_TEAM_ID = process.env.APPLE_TEAM_ID || '';
 const APPLE_KEY_ID = process.env.APPLE_KEY_ID || '';
 const APPLE_PRIVATE_KEY = process.env.APPLE_PRIVATE_KEY_PATH || '';
 const APPLE_REDIRECT = process.env.APPLE_REDIRECT_URI || `${APP_URL}/api/auth/apple/callback`;
+const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || '';
+const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || '';
+const GITHUB_REDIRECT = process.env.GITHUB_REDIRECT_URI || `${APP_URL}/api/auth/github/callback`;
 
 const UPLOAD_DIR = path.join(__dirname, 'uploads');
 const DOWNLOAD_DIR = path.join(__dirname, '..', 'downloads');
@@ -103,6 +106,7 @@ app.get('/api/config', (req, res) => {
   res.json({
     google: { enabled: !!GOOGLE_CLIENT_ID, clientId: GOOGLE_CLIENT_ID },
     apple: { enabled: !!APPLE_CLIENT_ID, clientId: APPLE_CLIENT_ID },
+    github: { enabled: !!GITHUB_CLIENT_ID, clientId: GITHUB_CLIENT_ID },
     version: '2.0.0',
   });
 });
@@ -244,6 +248,41 @@ app.post('/api/auth/apple/callback', async (req, res) => {
   }
 });
 
+// ================= OAUTH GITHUB (officiel) =================
+app.get('/api/auth/github', (req, res) => {
+  if (!GITHUB_CLIENT_ID) return res.status(500).json({ error: 'GitHub OAuth non configuré (GITHUB_CLIENT_ID manquant).' });
+  const params = new URLSearchParams({
+    client_id: GITHUB_CLIENT_ID,
+    redirect_uri: GITHUB_REDIRECT,
+    scope: 'user:email',
+    state: crypto.randomBytes(16).toString('hex'),
+  });
+  res.redirect(`https://github.com/login/oauth/authorize?${params}`);
+});
+app.get('/api/auth/github/callback', async (req, res) => {
+  const { code, error } = req.query;
+  if (error || !code) return res.redirect(`${APP_URL}/?oauth_error=${encodeURIComponent('Connexion GitHub refusée')}`);
+  try {
+    const tok = await axios.post('https://github.com/login/oauth/access_token', {
+      client_id: GITHUB_CLIENT_ID, client_secret: GITHUB_CLIENT_SECRET, code, redirect_uri: GITHUB_REDIRECT,
+    }, { headers: { Accept: 'application/json' } });
+    const accessToken = tok.data.access_token;
+    if (!accessToken) throw new Error('no token');
+    const ghUser = await axios.get('https://api.github.com/user', { headers: { Authorization: `Bearer ${accessToken}` } });
+    let email = ghUser.data.email;
+    if (!email) {
+      const emails = await axios.get('https://api.github.com/user/emails', { headers: { Authorization: `Bearer ${accessToken}` } });
+      const primary = emails.data.find(e => e.primary && e.verified) || emails.data[0];
+      email = primary?.email || `github-${ghUser.data.id}@users.noreply.github.com`;
+    }
+    const u = findOrCreateOAuthUser({ email, name: ghUser.data.name || ghUser.data.login, provider: 'github', sub: String(ghUser.data.id), device: '', ip: req.ip });
+    res.redirect(`${APP_URL}/?token=${encodeURIComponent(signToken(u))}`);
+  } catch (e) {
+    console.error('GitHub OAuth error:', e.response?.data || e.message);
+    res.redirect(`${APP_URL}/?oauth_error=${encodeURIComponent('Échec de la connexion GitHub')}`);
+  }
+});
+
 // ================= APPAIRAGE WEB <-> WINDOWS =================
 app.post('/api/devices/pair', auth, (req, res) => {
   const code = genCode();
@@ -334,4 +373,4 @@ if (fs.existsSync(dist)) {
   app.get('*', (req, res) => { if (!req.path.startsWith('/api/')) res.sendFile(path.join(dist, 'index.html')); });
 }
 
-app.listen(PORT, '0.0.0.0', () => console.log(`VaultShare API v2 sur http://0.0.0.0:${PORT} | Google: ${GOOGLE_CLIENT_ID ? 'configuré' : 'non configuré'} | Apple: ${APPLE_CLIENT_ID ? 'configuré' : 'non configuré'} | VirusTotal: ${VT_API_KEY ? 'configuré' : 'démo'}`));
+app.listen(PORT, '0.0.0.0', () => console.log(`VaultShare API v2 sur http://0.0.0.0:${PORT} | Google: ${GOOGLE_CLIENT_ID ? 'configuré' : 'non configuré'} | Apple: ${APPLE_CLIENT_ID ? 'configuré' : 'non configuré'} | GitHub: ${GITHUB_CLIENT_ID ? 'configuré' : 'non configuré'} | VirusTotal: ${VT_API_KEY ? 'configuré' : 'démo'}`));
