@@ -1,1 +1,1 @@
-# vaultshare
+.# vaultshare
