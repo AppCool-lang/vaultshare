@@ -1,0 +1,12 @@
+VAULTSHARE — Fichiers pour GitHub
+==================================
+Contenu :
+- index.html, assets/, config.js  -> le SITE (Cloudflare Pages)
+- server.js, db.js, package.json  -> le SERVEUR (Render)
+
+Sur GitHub : supprimez les anciens fichiers, puis glissez TOUS ces fichiers (Add file > Upload files).
+
+Cloudflare Pages : Framework None | Build command : vide | Output : /
+Render : Root Directory : vide | Build : npm install | Start : node server.js
+
+L'adresse du serveur est déjà dans config.js — rien à modifier !
