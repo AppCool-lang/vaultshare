@@ -294,8 +294,9 @@ app.get('/api/files/public', (req, res) => {
 });
 app.get('/api/files/:id/download', (req, res) => {
   const f = db.prepare('SELECT * FROM files WHERE id=?').get(req.params.id);
-  if (!f) return res.status(404).json({ error: 'Introuvable' });
+  if (!f) return res.status(404).json({ error: 'Fichier introuvable.' });
   if (f.status !== 'clean') return res.status(403).json({ error: 'Fichier non vérifié ou infecté — téléchargement bloqué.' });
+  if (!fs.existsSync(f.path)) return res.status(404).json({ error: 'Fichier absent du serveur (stockage réinitialisé). Veuillez le renvoyer.' });
   res.download(f.path, f.name);
 });
 app.delete('/api/files/:id', auth, (req, res) => {
@@ -310,7 +311,7 @@ app.delete('/api/files/:id', auth, (req, res) => {
 app.get('/api/downloads/windows', (req, res) => {
   const exe = path.join(DOWNLOAD_DIR, 'VaultShare-Setup.exe');
   if (fs.existsSync(exe)) return res.download(exe, 'VaultShare-Setup.exe');
-  res.status(404).json({ error: 'L\'installateur Windows n\'est pas encore disponible. Lancez le build dans windows-app/ (voir README).' });
+  res.status(404).json({ error: 'Installeur Windows non hébergé sur ce serveur. Utilisez le lien direct (GitHub Release) dans config.js : VAULTSHARE_EXE_URL.' });
 });
 app.get('/api/downloads/info', (req, res) => {
   const exe = path.join(DOWNLOAD_DIR, 'VaultShare-Setup.exe');
